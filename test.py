@@ -30,4 +30,3 @@ b = np.array([2, 3, 4])
 print np.vstack((a,b)).ravel()
 a= defaultdict(dict)
 a[1][2][3]=3
-print a
