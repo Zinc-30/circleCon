@@ -114,8 +114,12 @@ def test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT):
     #raw_input('Press any key to start...')
     U,V = socialMF(R,N,M,T,K,lambdaU,lambdaV,lambdaT)  
     vfn = np.vectorize(sigmoid)
-    print R 
-    print 'R_hat:\n', vfn(U.dot(V.T)) *max_r
+    R_hat = defaultdict(dict)
+    for u in R:
+        for i in R[u]:
+            R_hat[u][i] = sigmoid(U[u].dot(V[i])) *max_r
+    print 'R_hat:\n', R_hat
+    print "rmse",rmse(R,R_hat)
 
 
 def t_toy():
@@ -170,8 +174,14 @@ def t_epinion():
     lambdaU,lambdaV,lambdaT=0.1, 0.1, 1.0
     test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT)
 
-def RMSE():
-    pass
+def rmse(Rp,R):
+    error = 0.0
+    nums = 0
+    for u in R:
+        for i in R[u]:
+            error += (R[u][i]-Rp[u][i])**2
+            nums += 1
+    return np.sqrt(error/nums)
 
 if __name__ == "__main__":
 #   t_epinion()
