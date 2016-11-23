@@ -10,87 +10,75 @@ from matplotlib import pyplot as plt
 #             for v in T[u]:
 #                 T[u][v] /= All
 #     return T
-
-# def CircleCon1(T):
-#     for c in clist:
-#     for u in T:
-#         for v in T[u]:
-#             if T[u][v]:
-#                 All = sum(T[u].values())
-#         if All>0:
-#             for v in T[u]:
-#                 T[u][v] /= All
-#     return normalize(Sc)
-
-# def CircleCon2(T):
-#     Ec=np.zeros_like(Sc)
-#     #follower distribution
-#     Dw=np.ones_like(Nc,dtype=float)*Nc
-#     for w in range(numU):
-#         All=Nc[:,w].sum()
-#         if All>0:
-#             Dw[:,w]/=All
-#     for c in range(numC):
-#         for u in range(numU):
-#             V=Sc[c][u]
-#             for i in range(numU):
-#                 if V[i]>0:
-#                     Fv = S[i]
-#                     Ec[c][u][i] = Nc[c][i] * Dw[c].dot(Fv)
-#     return normalize(Ec)
-
-def CircleCon3(T):
+def gen_data(fname):
+    for line in open(fname):
+        try:
+            yield [int(i)-1 for i in line.split()] #index start from 1
+        except:
+            print line
+def reverseR(R):
+    Rr=defaultdict(dict)
+    for u in R:
+        for i in R[u]:
+            Rr[i][u] = R[u][i]
+    return Rr
+def normalize(T):
     for u in T:
-        for v in T[u]:
-            if T[u][v]:
-                k=0
-                All = 0
-                for c in clists:
-                    nc[k] = len(set(R[v].keys())&set(c))
-                    All += nc[k]
-                if All>0:
-                    for c in clists:
-                        res[c][u][v] = 1.0 * Nc[c][i]/Nc[:,i].sum()
-    return normalize(res)
-
-def average(T,c):
+        All = sum(T[u].values())
+        if All>0:
+            for v in T[u]:
+                T[u][v] /= All
+    return T 
+def average(Rr,c):
     All = 0.0;
     sumn = 0;
     for i in c:
-        All += sum(T[i].values())
-        sumn += len(T[i].values())
+        All += sum(Rr[i].values())
+        sumn += len(Rr[i].values())
     return All/sumn
 
-def circleCon(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
-    def costL(U,V,c,*args):
-        R,T,Rr=args
-        cost=0.0
-        bias = average(Rr,c)
-        for u in R:
-            for i in set(c)&set(R[u]):
-                if i in c:
-                    cost += 0.5 * (R[u][i] - bias - U[u].dot(V[i]))**2
-        for u in R:
-            if set(c)&set(R[u]):
-                cost += lambdaU/2 * np.linalg.norm(U[u])
-        for i in c:
-            cost += lambdaV/2 * np.linalg.norm(V[i])
+def main(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
+    def CircleCon3(T,clists):
+        nc = defaultdict(dict)
+        res = defaultdict(dict)
+        for i in range(len(clists)):
+            res[i] = defaultdict(dict)
         for u in T:
-            if set(c)&set(R[u]):
-                e = np.copy(U[u]) #1xK
-                for v in T[u]:
-                    e -= T[u][v]*U[v]
-                cost += lambdaT/2 * e.dot(e.T)
+            for v in T[u]:
+                All = 0
+                for ci,c in enumerate(clists):
+                    nc[ci]=(len(set(R[v].keys())&set(c)))
+                    All += nc[ci]
+                if All>0:
+                    for ci,c in enumerate(clists):
+                        if nc[ci]>0:
+                            res[ci][u][v] = 1.0 * nc[ci]/All
+        return res
+
+    def costL(U,V,*args):
+        vid,R,T,Rr=args
+        cost=0.0
+        bias = average(Rr,vid)
+        for u in R:
+            for i in (set(vid)&set(R[u])):
+                cost += 0.5 * (R[u][i] - bias - U[u].dot(V[i]))**2
+        cost += lambdaU/2 * np.linalg.norm(U)
+        cost += lambdaV/2 * np.linalg.norm(V)
+        for u in T:
+            e = np.copy(U[u]) #1xK
+            for v in T[u]:
+                e -= T[u][v]*U[v]
+            cost += lambdaT/2 * e.dot(e.T)
         return cost
 
     def gradient(U,V, *args):
-        R,T,Rr=args
+        vid,R,T,Rr=args
         dU = np.zeros(U.shape)
         dV = np.zeros(V.shape)
+        bias = average(Rr,vid)
         for u in R:
-            for i in R[u]:
-                tmp = U[u].dot(V[i])
-                dU[u] += V[i] * dsigmoid(tmp) * (sigmoid(tmp)-R[u][i]) 
+            for i in set(vid)&set(R[u]):
+                dU[u] += V[i]*(bias+U[u].dot(V[i])-R[u][i]) 
             dU[u] += lambdaU * U[u]
             e = np.copy(U[u]) #1xK
             for v in T[u]:
@@ -105,10 +93,9 @@ def circleCon(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
                     e2 += T[v][u] * e 
             dU[u] -= lambdaT * e2
 
-        for i in Rr:
+        for i in vid:
             for u in Rr[i]:
-                tmp = U[u].dot(V[i])
-                dV[i] += U[u] * dsigmoid(tmp) * (sigmoid(tmp)-R[u][i])
+                dV[i] += U[u] * (bias+U[u].dot(V[i])-R[u][i])
             dV[i] += lambdaV * V[i]
         return dU,dV
 
@@ -124,10 +111,12 @@ def circleCon(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
         x_ = np.vstack((gu,gv)).ravel()
         return x_
 
-    def optim(x0,uidL,vidL):
+    def optim(x0,vid,cid):
         from scipy import optimize
         x0=np.vstack(x0).ravel()
-        args=R,T,Rr
+        Sc = normalize(Se[cid])
+        args=vid,R,Sc,Rr
+        print "Sc",Sc
         x = optimize.fmin_cg(f, x0, fprime=gradf, args=args)
         x=x.reshape(N+M,K)
         u, v = x[:N,], x[N:,]
@@ -135,53 +124,47 @@ def circleCon(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
 
 
     Rr = reverseR(R)
-    T=normalize(T)
-    indexU = list()
-    indexV = list()
-    Uembd = list()
-    Vembd =list()
-    indexC = defaultdict(dict)
-    nid = 0
-    for c in clists:
-        indexC[c] = nid
-        Um = defaultdict(dict)
-        Vm = defaultdict(dict)
-        for u in R:
-            if set(c)&set(R[u]):
-                Um[u] = np.random.normal(size=K)
-        for i in c:
-            Vm[i] = np.random.normal(size=K)
-        T = normalize(T)
-        x0=U,V
-        ansu,ansv = optim(x0)
-        Uembd.append(ansU)
-        Vembd.append(ansV)
+    Se = CircleCon3(T,clists)
+    Uembd = defaultdict(dict)
+    Vembd = np.random.normal(size=(M,K))
+    print Vembd
+    for cid,c in enumerate(clists):
+        Uc = np.random.normal(size=(N,K))
+        x0=Uc,Vembd
+        Uc,Vembd = optim(x0,c,cid)
+        Uembd[cid] = Uc
+    return Uembd,Vembd
 
-    return optim(x0)
-
-def gen_data(fname):
-    for line in open(fname):
-        try:
-            yield [int(i)-1 for i in line.split()] #index start from 1
-        except:
-            print line
-
-def reverseR(R):
-    Rr=defaultdict(dict)
-    for u in R:
-        for i in R[u]:
-            Rr[i][u] = R[u][i]
-    return Rr
-
-
-def test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT):
+def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT):
     print 'N:%d, M:%d, K:%d,lambdaU:%s, lambdaV:%s,lambdaT:%s' \
             %(N,M,K,lambdaU,lambdaV,lambdaT)
     #raw_input('Press any key to start...')
-    U,V = socialMF(R,N,M,T,K,lambdaU,lambdaV,lambdaT)  
-    vfn = np.vectorize(sigmoid)
+    Rr = reverseR(R)
+    bias = []
+    for c in C:
+        bias.append(average(Rr,c))
+
+    v2c = defaultdict(int)
+    for cid,c in enumerate(C):
+        for v in c:
+            v2c[v] = cid
+
+    Uembd,Vembd = main(R,T,C,N,M,K,lambdaU,lambdaV,lambdaT)
+    print "u",Uembd
+    print "v",Vembd  
+    R_=np.zeros((N,M))
+    for u in R:
+        for v in R[u]:
+            cid = v2c[v]
+            if cid<len(Uembd):
+                ub = Uembd[cid][u]
+                vb = Vembd[v]
+                R_[u][v] = max_r*max(0,(ub.dot(vb)+bias[cid]))
+            else:
+                R_[u][v] = 0;
+    
     print R 
-    print 'R_hat:\n', vfn(U.dot(V.T)) *max_r
+    print 'R_hat:\n', R_
 
 
 def t_toy():
@@ -199,6 +182,7 @@ def t_toy():
 
     R=defaultdict(dict)
     T=defaultdict(dict)
+    C=list()
     for i in xrange(len(R0)):
         for j in xrange(len(R0[0])):
             if R0[i][j]>0:
@@ -207,8 +191,11 @@ def t_toy():
     for i in xrange(len(T0)):
         for j in T0[i]:
             T[i][j-1]=1.0
-
-    test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT)
+    for i in xrange(3):
+        if i%2:
+            C.append([i,i+1])
+    C = [[0,1,2,3]]
+    test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT)
 
 def t_epinion():
     #data from: http://www.trustlet.org/wiki/Epinions_datasets

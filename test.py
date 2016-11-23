@@ -24,3 +24,10 @@ for i in xrange(len(T0)):
         T[i][j-1]=1.0
 print set(R.keys())&set([1])
 print np.random.normal(size=2)
+
+a = np.array([1, 2, 3])
+b = np.array([2, 3, 4])
+print np.vstack((a,b)).ravel()
+a= defaultdict(dict)
+a[1][2][3]=3
+print a
