@@ -16,6 +16,7 @@ def gen_data(fname):
             yield [int(i)-1 for i in line.split()] #index start from 1
         except:
             print line
+
 def reverseR(R):
     Rr=defaultdict(dict)
     for u in R:
@@ -36,7 +37,14 @@ def average(Rr,c):
         All += sum(Rr[i].values())
         sumn += len(Rr[i].values())
     return All/sumn
-
+def rmse(U,V,R):
+    error = 0.0
+    nums = 0
+    for u in R:
+        for i in R[u]:
+            error += (sigmoid(U[u].dot(V[i])) *5 - R[u][i])**2
+            nums += 1
+    return np.sqrt(error/nums)
 def main(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
     def CircleCon3(T,clists):
         nc = defaultdict(dict)
@@ -197,35 +205,40 @@ def t_toy():
     C = [[0,1,2,3]]
     test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT)
 
-def t_epinion():
+def t_yelp():
     #data from: http://www.trustlet.org/wiki/Epinions_datasets
     N,M = 0,0
     max_r = 5.0
     R=defaultdict(dict)
     T=defaultdict(dict)
+    R_test=defaultdict(dict)
     print 'get T'
-    limit = 10**2
-    for u,v,_ in gen_data('./epinions/trust_data.txt'):
-        if u>=limit or v>=limit:
-            continue
-        T[u][v]=1.0
-        N=max(N,u,v)
+    # limit = 10**2
+    for line in open('./data/users.txt'):
+        u = int(line.split(':')[0])
+        uf = line.split(':')[1][1:-1].split(',')
+        if len(uf)>1:
+            for x in line.split(':')[1][1:-1].split(',')[:-1]:
+                v = int(x)
+                T[u][v] = 1.0
+
     print 'get R'
-    for u,i,r in gen_data('./epinions/ratings_data.txt'):
-        if u>=limit or i>=limit:
-            continue
+    for line in open('./data/ratings-train.txt'):
+        u,i,r = [int(x) for x in line.split('::')[:3]]
         R[u][i] = r/max_r
         N=max(N,u)
         M=max(M,i)
     N+=1
     M+=1
+    for line in open('./data/ratings-test.txt'):
+        u,i,r = [int(x) for x in line.split('::')[:3]]
+        R_test[u][i] = r/max_r
     K=5
-    lambdaU,lambdaV,lambdaT=0.1, 0.1, 1.0
-    test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT)
+    # for line in open('./data/items.txt'):
 
-def RMSE():
-    pass
+    lambdaU,lambdaV,lambdaT=0.1, 0.1, 1.0
+    # test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT)
 
 if __name__ == "__main__":
 #   t_epinion()
-   t_toy()
+   t_yelp()
