@@ -1,8 +1,8 @@
 import random
 import numpy as np
 from collections import defaultdict
-from scipy.sparse import csr_matrix as cm
-
+from time import time
+import pp
 def reverseR(R):
     Rr=defaultdict(dict)
     for u in R:
@@ -61,8 +61,9 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
             for v in T[u]:
                 All = 0
                 for ci,c in enumerate(clists):
-                    nc[ci]=(len(set(R[v].keys())&set(c)))
-                    All += nc[ci]
+                    if v in R:
+                        nc[ci]=(len(set(R[v].keys())&set(c)))
+                        All += nc[ci]
                 if All>0:
                     for ci,c in enumerate(clists):
                         if nc[ci]>0:
@@ -197,6 +198,7 @@ def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
     print 'N:%d, M:%d, K:%d,lambdaU:%s, lambdaV:%s,lambdaT:%s' \
             %(N,M,K,lambdaU,lambdaV,lambdaT)
     #raw_input('Press any key to start...')
+    start = time()
     Uembd,Vembd = circleRec(R,T,C,N,M,K,lambdaU,lambdaV,lambdaT)
     # print "u",Uembd
     # print "v",Vembd  
@@ -211,8 +213,10 @@ def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
             v2c[v] = cid
 
     # print 'R_hat:\n', R_hat
-    print rmse(Uembd,Vembd,R_test,bias,v2c)
-    print mae(Uembd,Vembd,R_test,bias,v2c)
+    print "time",time()-start
+    print "rmse",rmse(Uembd,Vembd,R_test,bias,v2c)
+    print "mae",mae(Uembd,Vembd,R_test,bias,v2c)
+    return U,V,rmse(Uembd,Vembd,R_test,bias,v2c),mae(Uembd,Vembd,R_test,bias,v2c)
 
 def t_toy():
     R0 = [
@@ -253,7 +257,7 @@ def t_yelp():
     R=defaultdict(dict)
     T=defaultdict(dict)
     R_test=defaultdict(dict)
-    limit = 10000
+    limitu,limiti = 100,1000
     print 'get T'
     for line in open('./yelp_data/users.txt','r'):
         u = int(line.split(':')[0])
@@ -261,36 +265,69 @@ def t_yelp():
         if len(uf)>1:
             for x in line.split(':')[1][1:-1].split(',')[:-1]:
                 v = int(x)
-                T[u][v] = 1.0
+                if u < limitu and v<limitu:
+                    T[u][v] = 1.0
     print 'get R'
     k = 0
-    ul,il,rl = [],[],[]
     for line in open('./yelp_data/ratings-train.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
-        ul.append(u)
-        il.append(i)
-        rl.append(r)
         N = max(N,u)
         M = max(M,i)
-        R[u][i] = r/max_r
-        if k>limit:
-            break
-    # print ul
-    Rcsr = cm((rl,(ul,il)))
+        if u<limitu and i<limiti:
+            R[u][i] = r/max_r
+
     N+=1
     M+=1
     print 'get R_test'
     for line in open('./yelp_data/ratings-test.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
-        R_test[u][i] = r/max_r
+        if u<limitu and i<limiti:
+            R_test[u][i] = r/max_r
     print "get Circle"
     C = [[] for i in range(cNum)]
     for line in open('./yelp_data/items-class.txt','r'):
         i,ci = [int(x) for x in line.split(' ')]
-        C[ci].append(i)
+        if i<limiti:
+            C[ci].append(i)
 
     lambdaU,lambdaV,lambdaT,K=0.2, 0.2, 0.1, 4
-    test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
+    # test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
+
+    job_server = pp.Server()
+    jobs = []
+    for lambdaU in [0.2,0.5,1]:
+        for lambdaV in [0.2,0.5,1]:
+            for lambdaT in [0.1,0.5,1]:
+                # test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
+                jobs.append(job_server.submit(test,(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R),(mae,rmse,average,circleRec,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+    job_server.wait()
+    rmse_,mae_ = 100000,1000000
+    for job in jobs:
+            U,V,rmse1,mae1 = job()
+            if mae1+rmse1<mae_+rmse_:
+                U_ = U
+                V_ = V
+                lambdaU_ = lambdaU
+                lambdaV_ = lambdaV
+                lambdaT_ = lambdaT
+                mae_,rmse_ = mae1,rmse1
+    print "jobs finish"
+    jobs = []
+    for K in [1,2,3,4,5]:
+        jobs.append(job_server.submit(test,(R,T,C,N,M,K,max_r,lambdaU_,lambdaV_,lambdaT,R),(mae,rmse,average,circleRec,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+    job_server.wait()
+    for job in jobs:
+            U,V,rmse1,mae1 = job()
+            if mae1+rmse1<mae_+rmse_:
+                K_ = K
+                U_ = U
+                V_ = V
+                lambdaU_ = lambdaU
+                lambdaV_ = lambdaV
+                mae_,rmse_ = mae1,rmse1
+    print "jobs finish"
+    print "rmse",rmse(U_,V_,R_test)
+    print "map",meanap(U_,V_,R_test)
 
 if __name__ == "__main__":
 #   t_epinion()
