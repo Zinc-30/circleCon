@@ -51,7 +51,7 @@ def mae(U,V,R,bias,v2c):
                 ap += abs(max(0,(ub.dot(vb)+bias[cid]))-R[u][i])/R[u][i]
                 nums += 1
     return ap/nums
-def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
+def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT,Rmat):
     def CircleCon3(T,clists):
         nc = defaultdict(dict)
         res = defaultdict(dict)
@@ -61,8 +61,9 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
             for v in T[u]:
                 All = 0
                 for ci,c in enumerate(clists):
-                    nc[ci]=(len(set(R[v].keys())&set(c)))
-                    All += nc[ci]
+                    if v in R:
+                        nc[ci]=(len(set(R[v].keys())&set(c)))
+                        All += nc[ci]
                 if All>0:
                     for ci,c in enumerate(clists):
                         if nc[ci]>0:
@@ -84,12 +85,15 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
                 e -= T[u][v]*U[v]
             cost += lambdaT/2 * e.dot(e.T)
         return cost
+    def get_csrmat(mat1,u,v):
+        
 
     def gradient(U,V, *args):
         vid,R,T,Rr=args
         dU = np.zeros(U.shape)
         dV = np.zeros(V.shape)
         bias = average(Rr,vid)
+        dU = (U.dot(V)+bias-Rmat).dot(V.T)
         for u in R:
             for i in set(vid)&set(R[u]):
                 dU[u] += V[i]*(bias+U[u].dot(V[i])-R[u][i]) 
@@ -180,7 +184,7 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
         Uembd[cid] = Uc
     return Uembd,Vembd
 
-def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
+def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test,Rmat):
     def lookR_hat():
         R_hat=np.zeros((N,M))
         for u in R:
@@ -197,7 +201,7 @@ def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
     print 'N:%d, M:%d, K:%d,lambdaU:%s, lambdaV:%s,lambdaT:%s' \
             %(N,M,K,lambdaU,lambdaV,lambdaT)
     #raw_input('Press any key to start...')
-    Uembd,Vembd = circleRec(R,T,C,N,M,K,lambdaU,lambdaV,lambdaT)
+    Uembd,Vembd = circleRec(R,T,C,N,M,K,lambdaU,lambdaV,lambdaT,Rmat)
     # print "u",Uembd
     # print "v",Vembd  
     Rr = reverseR(R)
@@ -253,7 +257,7 @@ def t_yelp():
     R=defaultdict(dict)
     T=defaultdict(dict)
     R_test=defaultdict(dict)
-    limit = 10000
+    limit = 100
     print 'get T'
     for line in open('./yelp_data/users.txt','r'):
         u = int(line.split(':')[0])
@@ -261,20 +265,20 @@ def t_yelp():
         if len(uf)>1:
             for x in line.split(':')[1][1:-1].split(',')[:-1]:
                 v = int(x)
-                T[u][v] = 1.0
+                if u<limit and v<limit:
+                    T[u][v] = 1.0
     print 'get R'
     k = 0
     ul,il,rl = [],[],[]
     for line in open('./yelp_data/ratings-train.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
-        ul.append(u)
-        il.append(i)
-        rl.append(r)
-        N = max(N,u)
-        M = max(M,i)
-        R[u][i] = r/max_r
-        if k>limit:
-            break
+        if u<limit and i<limit:
+            N=max(N,u)
+            M=max(M,i)
+            ul.append(u)
+            il.append(i)
+            rl.append(r)
+            R[u][i] = r/max_r
     # print ul
     Rcsr = cm((rl,(ul,il)))
     N+=1
@@ -282,15 +286,17 @@ def t_yelp():
     print 'get R_test'
     for line in open('./yelp_data/ratings-test.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
-        R_test[u][i] = r/max_r
+        if u<limit and i<limit:
+            R_test[u][i] = r/max_r
     print "get Circle"
     C = [[] for i in range(cNum)]
     for line in open('./yelp_data/items-class.txt','r'):
         i,ci = [int(x) for x in line.split(' ')]
-        C[ci].append(i)
+        if i<limit:
+            C[ci].append(i)
 
     lambdaU,lambdaV,lambdaT,K=0.2, 0.2, 0.1, 4
-    test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
+    test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test,Rcsr)
 
 if __name__ == "__main__":
 #   t_epinion()
