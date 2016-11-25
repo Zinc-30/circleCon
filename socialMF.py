@@ -1,7 +1,6 @@
 import random
 import numpy as np
 from collections import defaultdict
-from matplotlib import pyplot as plt
 
 
 def sigmoid(z):
@@ -162,8 +161,8 @@ def t_yelp():
     R=defaultdict(dict)
     T=defaultdict(dict)
     R_test=defaultdict(dict)
-    limitu = 100
-    limiti = 300
+    limitu = 10000
+    limiti = 100000
     print 'get T'
     for line in open('./yelp_data/users.txt','r'):
         u = int(line.split(':')[0])
