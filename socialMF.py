@@ -9,7 +9,12 @@ def sigmoid(z):
 
 def dsigmoid(z):
     return np.exp(-z)/(1+np.exp(-z))**2
-
+def reverseR(R):
+    Rr=defaultdict(dict)
+    for u in R:
+        for i in R[u]:
+            Rr[i][u] = R[u][i]
+    return Rr
 def normalize(T):
     for u in T:
         All = sum(T[u].values())
@@ -21,9 +26,6 @@ def normalize(T):
 def socialMF(R,N,M, T, K, lambdaU,lambdaV,lambdaT):
     def costL(U,V,*args):
         R,T,Rr=args
-        print "U",U
-        print "V",V
-        print "R",R
         cost=0.0
         for u in R:
             for i in R[u]:
@@ -100,12 +102,7 @@ def gen_data(fname):
         except:
             print line
 
-def reverseR(R):
-    Rr=defaultdict(dict)
-    for u in R:
-        for i in R[u]:
-            Rr[i][u] = R[u][i]
-    return Rr
+
 
 
 def test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT):
