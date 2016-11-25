@@ -176,8 +176,8 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
     for cid,c in enumerate(clists):
         Uc = np.random.normal(0,0.01,size=(N,K))
         x0=Uc,Vembd
-        # Uc,Vembd = optim(x0,c,cid)
-        Uc,Vembd = train(Uc,Vembd,c,cid)
+        Uc,Vembd = optim(x0,c,cid)
+        # Uc,Vembd = train(Uc,Vembd,c,cid)
         Uembd[cid] = Uc
     return Uembd,Vembd
 
@@ -216,7 +216,7 @@ def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
     print "time",time()-start
     print "rmse",rmse(Uembd,Vembd,R_test,bias,v2c)
     print "mae",mae(Uembd,Vembd,R_test,bias,v2c)
-    return U,V,rmse(Uembd,Vembd,R_test,bias,v2c),mae(Uembd,Vembd,R_test,bias,v2c)
+    return Uembd,Vembd,rmse(Uembd,Vembd,R_test,bias,v2c),mae(Uembd,Vembd,R_test,bias,v2c)
 
 def t_toy():
     R0 = [
@@ -291,7 +291,7 @@ def t_yelp():
             C[ci].append(i)
 
     lambdaU,lambdaV,lambdaT,K=0.2, 0.2, 0.1, 4
-    # test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
+    test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
 
     job_server = pp.Server()
     jobs = []
@@ -314,7 +314,7 @@ def t_yelp():
     print "jobs finish"
     jobs = []
     for K in [1,2,3,4,5]:
-        jobs.append(job_server.submit(test,(R,T,C,N,M,K,max_r,lambdaU_,lambdaV_,lambdaT,R),(mae,rmse,average,circleRec,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+        jobs.append(job_server.submit(test,(R,T,C,N,M,K,max_r,lambdaU_,lambdaV_,lambdaT,R_test),(mae,rmse,average,circleRec,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
     job_server.wait()
     for job in jobs:
             U,V,rmse1,mae1 = job()
@@ -326,8 +326,8 @@ def t_yelp():
                 lambdaV_ = lambdaV
                 mae_,rmse_ = mae1,rmse1
     print "jobs finish"
-    print "rmse",rmse(U_,V_,R_test)
-    print "map",meanap(U_,V_,R_test)
+    print "rmse",rmse_
+    print "map",mae_
 
 if __name__ == "__main__":
 #   t_epinion()
