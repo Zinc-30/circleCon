@@ -22,6 +22,24 @@ def normalize(T):
             for v in T[u]:
                 T[u][v] /= All
     return T 
+def rmse(U,V,R):
+    error = 0.0
+    nums = 0
+    for u in R:
+        for i in R[u]:
+            error += 25*(sigmoid(U[u].dot(V[i]))- R[u][i])**2
+            nums += 1
+    return np.sqrt(error/nums)
+def meanap(U,V,R):
+    ap = 0.0
+    nums = 0
+    for u in R:
+        for i in R[u]:
+            ub = U[u]
+            vb = V[i]
+            ap += 1 - abs(sigmoid(U[u].dot(V[i]))-R[u][i])/R[u][i]
+            nums += 1
+    return ap/nums
 
 def socialMF(R,N,M, T, K, lambdaU,lambdaV,lambdaT):
     def costL(U,V,*args):
@@ -95,28 +113,19 @@ def socialMF(R,N,M, T, K, lambdaU,lambdaV,lambdaT):
     x0=U,V  
     return optim(x0)
 
-def gen_data(fname):
-    for line in open(fname):
-        try:
-            yield [int(i)-1 for i in line.split()] #index start from 1
-        except:
-            print line
-
-
-
-
-def test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT):
+def test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
     print 'N:%d, M:%d, K:%d,lambdaU:%s, lambdaV:%s,lambdaT:%s' \
             %(N,M,K,lambdaU,lambdaV,lambdaT)
     #raw_input('Press any key to start...')
     U,V = socialMF(R,N,M,T,K,lambdaU,lambdaV,lambdaT)  
-    vfn = np.vectorize(sigmoid)
-    R_hat = defaultdict(dict)
-    for u in R:
-        for i in R[u]:
-            R_hat[u][i] = sigmoid(U[u].dot(V[i])) *max_r
-    print 'R_hat:\n', R_hat
-    print "rmse",rmse(R,R_hat)
+    # vfn = np.vectorize(sigmoid)
+    # R_hat = defaultdict(dict)
+    # for u in R:
+    #     for i in R[u]:
+    #         R_hat[u][i] = sigmoid(U[u].dot(V[i])) *max_r
+    # print 'R_hat:\n', R_hat
+    print "rmse",rmse(U,V,R_test)
+    print "map",meanap(U,V,R_test)
 
 
 def t_toy():
@@ -145,41 +154,46 @@ def t_toy():
 
     test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT)
 
-def t_epinion():
+def t_yelp():
     #data from: http://www.trustlet.org/wiki/Epinions_datasets
     N,M = 0,0
     max_r = 5.0
+    cNum = 8
     R=defaultdict(dict)
     T=defaultdict(dict)
+    R_test=defaultdict(dict)
+    limitu = 100
+    limiti = 300
     print 'get T'
-    limit = 10**2
-    for u,v,_ in gen_data('./epinions/trust_data.txt'):
-        if u>=limit or v>=limit:
-            continue
-        T[u][v]=1.0
-        N=max(N,u,v)
+    for line in open('./yelp_data/users.txt','r'):
+        u = int(line.split(':')[0])
+        uf = line.split(':')[1][1:-1].split(',')
+        if len(uf)>1:
+            for x in line.split(':')[1][1:-1].split(',')[:-1]:
+                v = int(x)
+                if u<limitu and v<limitu:
+                    T[u][v] = 1.0
+
     print 'get R'
-    for u,i,r in gen_data('./epinions/ratings_data.txt'):
-        if u>=limit or i>=limit:
-            continue
-        R[u][i] = r/max_r
+    for line in open('./yelp_data/ratings-train.txt','r'):
+        u,i,r = [int(x) for x in line.split('::')[:3]]
         N=max(N,u)
         M=max(M,i)
+        if u<limitu and i<limiti:
+            R[u][i] = r/max_r
+
     N+=1
     M+=1
-    K=5
-    lambdaU,lambdaV,lambdaT=0.1, 0.1, 1.0
-    test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT)
+    print 'get R_test'
+    for line in open('./yelp_data/ratings-test.txt','r'):
+        u,i,r = [int(x) for x in line.split('::')[:3]]
+        if u<limitu and i<limiti:
+            R_test[u][i] = r/max_r
 
-def rmse(Rp,R):
-    error = 0.0
-    nums = 0
-    for u in R:
-        for i in R[u]:
-            error += (R[u][i]-Rp[u][i])**2
-            nums += 1
-    return np.sqrt(error/nums)
+    lambdaU,lambdaV,lambdaT,K=0.2, 0.2, 0.1, 4
+    test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
+
 
 if __name__ == "__main__":
-#   t_epinion()
-   t_toy()
+  t_yelp()
+   # t_toy()
