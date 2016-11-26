@@ -176,8 +176,8 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
     for cid,c in enumerate(clists):
         Uc = np.random.normal(0,0.01,size=(N,K))
         x0=Uc,Vembd
-        Uc,Vembd = optim(x0,c,cid)
-        # Uc,Vembd = train(Uc,Vembd,c,cid)
+        # Uc,Vembd = optim(x0,c,cid)
+        Uc,Vembd = train(Uc,Vembd,c,cid)
         Uembd[cid] = Uc
     return Uembd,Vembd
 
@@ -218,37 +218,6 @@ def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
     print "mae",mae(Uembd,Vembd,R_test,bias,v2c)
     return Uembd,Vembd,rmse(Uembd,Vembd,R_test,bias,v2c),mae(Uembd,Vembd,R_test,bias,v2c)
 
-def t_toy():
-    R0 = [
-         [5,3,0,1],
-         [4,0,0,1],
-         [1,1,0,5],
-         [1,0,0,4],
-         [0,1,5,4],
-        ]
-    max_r = 5.0
-    T0 = [[3,2],[1,3,4],[2],[1,5],[3]]
-    
-
-    R=defaultdict(dict)
-    T=defaultdict(dict)
-    C=list()
-    for i in xrange(len(R0)):
-        for j in xrange(len(R0[0])):
-            if R0[i][j]>0:
-                R[i][j]=1.0 * R0[i][j] / max_r
-    print R
-    for i in xrange(len(T0)):
-        for j in T0[i]:
-            T[i][j-1]=1.0
-    for i in xrange(3):
-        if i%2:
-            C.append([i,i+1])
-    C = [[0,1,2,3]]
-    N,M,K=5,4,4
-    lambdaU,lambdaV,lambdaT=0.02, 0.02, 0.01
-    test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R)
-
 def t_yelp():
     #data from: http://www.trustlet.org/wiki/Epinions_datasets
     N,M = 0,0
@@ -257,7 +226,7 @@ def t_yelp():
     R=defaultdict(dict)
     T=defaultdict(dict)
     R_test=defaultdict(dict)
-    limitu,limiti = 100,1000
+    limitu,limiti = 1000,20000
     print 'get T'
     for line in open('./yelp_data/users.txt','r'):
         u = int(line.split(':')[0])
