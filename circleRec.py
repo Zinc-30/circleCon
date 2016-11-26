@@ -157,7 +157,7 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
             V -= rate * dV
             e = costL(U,V,*args)
             res.append(e)
-            if not step%stage:
+            if not step%(stage*5):
                 print step,e
             if step>100 and abs(sum(res[-10:])-sum(res[-20:-10]))<tol:
                 print "====================" 
@@ -290,5 +290,5 @@ def t_yelp(limitu,limiti):
 
 if __name__ == "__main__":
 #   t_epinion()
-   t_yelp(100,2000)
+   t_yelp(1000,20000)
    # t_toy()

@@ -85,7 +85,7 @@ def PMF(R,N,M,K, lambdaU,lambdaV):
             V -= rate * dV
             e = costL(U,V,*args)
             res.append(e)
-            if not step%stage:
+            if not step%(stage*5):
                 print step,e
             if step>100 and abs(sum(res[-10:])-sum(res[-20:-10]))<tol:
                 print "====================" 
@@ -116,7 +116,7 @@ def test(R,N,M,K,lambdaU,lambdaV,R_test):
 
 def t_yelp(limitu,limiti):
     #data from: http://www.trustlet.org/wiki/Epinions_datasets
-    N,M = 0,0
+    N,M = limitu,limiti
     max_r = 5.0
     cNum = 8
     R=defaultdict(dict)
@@ -180,4 +180,4 @@ def t_yelp(limitu,limiti):
     print "map-test",meanap(U_,V_,R_test)
     
 if __name__ == "__main__":
-   t_yelp(100,2000)
+   t_yelp(1000,20000)
