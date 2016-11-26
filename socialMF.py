@@ -105,26 +105,55 @@ def socialMF(R,N,M, T, K, lambdaU,lambdaV,lambdaT):
         x=x.reshape(N+M,K)
         u, v = x[:N,], x[N:,]
         return  u,v
+    def train(U,V,T):
+        args=R,T,Rr
+        res=[]
+        steps=10**3
+        rate = 0.1
+        pregradU = 0
+        pregradV = 0
+        tol=1e-3
+        momentum = 0.8
+        stage = max(steps/100 , 1)
+        for step in xrange(steps):
+            dU,dV = gradient(U,V,*args)
+            dU = dU + momentum*pregradU
+            dV = dV + momentum*pregradV
+            pregradU = dU
+            pregradV = dV
+            if not step%stage and rate>0.001:
+                rate = 0.95*rate
+            U -= rate * dU
+            V -= rate * dV
+            e = costL(U,V,*args)
+            res.append(e)
+            if not step%stage:
+                print step,e
+            if step>100 and abs(sum(res[-10:])-sum(res[-20:-10]))<tol:
+                print "====================" 
+                print "stop in %d step"%(step)
+                print "error is ",e
+                print "====================" 
+                break
+        return U, V
 
     U = np.random.normal(size=(N,K))
     V = np.random.normal(size=(M,K))
     Rr = reverseR(R)
     T=normalize(T)
-    x0=U,V  
-    return optim(x0)
+    x0=U,V
+    U,V = train(U,V,T) 
+    # U,V = optim(x0) 
+    return U,V
 
 def test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
     print 'N:%d, M:%d, K:%d,lambdaU:%s, lambdaV:%s,lambdaT:%s' \
             %(N,M,K,lambdaU,lambdaV,lambdaT)
-    #raw_input('Press any key to start...')
     U,V = socialMF(R,N,M,T,K,lambdaU,lambdaV,lambdaT)  
-    # vfn = np.vectorize(sigmoid)
-    # R_hat = defaultdict(dict)
-    # for u in R:
-    #     for i in R[u]:
-    #         R_hat[u][i] = sigmoid(U[u].dot(V[i])) *max_r
-    # print 'R_hat:\n', R_hat
     start = time()
+    print "=================RESULT======================="
+    print 'K:%d,lambdaU:%s, lambdaV:%s,lambdaT:%s' \
+            %(K,lambdaU,lambdaV,lambdaT)
     print "rmse",rmse(U,V,R_test)
     print "map",meanap(U,V,R_test)
     print "time",time()-start
@@ -156,16 +185,14 @@ def t_toy():
             T[i][j-1]=1.0
     test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT)
 
-def t_yelp():
+def t_yelp(limitu,limiti):
     #data from: http://www.trustlet.org/wiki/Epinions_datasets
-    N,M = 0,0
+    N,M = limitu,limiti
     max_r = 5.0
     cNum = 8
     R=defaultdict(dict)
     T=defaultdict(dict)
     R_test=defaultdict(dict)
-    limitu = 100
-    limiti = 1000
     print 'get T'
     for line in open('./yelp_data/users.txt','r'):
         u = int(line.split(':')[0])
@@ -179,29 +206,24 @@ def t_yelp():
     print 'get R'
     for line in open('./yelp_data/ratings-train.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
-        N=max(N,u)
-        M=max(M,i)
         if u<limitu and i<limiti:
             R[u][i] = r/max_r
 
-    N+=1
-    M+=1
     print 'get R_test'
     for line in open('./yelp_data/ratings-test.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
         if u<limitu and i<limiti:
             R_test[u][i] = r/max_r
 
-    lambdaU,lambdaV,lambdaT,K=0.2, 0.2, 0.1, 4
-    job_server = pp.Server()
+    lambdaU_,lambdaV_,lambdaT_,K_=0.2, 0.2, 0.1, 4
+    U_,V_,rmse_,mae_ = test(R,T,N,M,K_,max_r,lambdaU_,lambdaV_,lambdaT_,R_test)
+    job_server = pp.Server(5)
     jobs = []
     for lambdaU in [0.2,0.5,1]:
         for lambdaV in [0.2,0.5,1]:
             for lambdaT in [0.1,0.5,1]:
-                # test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
-                jobs.append(job_server.submit(test,(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R),(meanap,rmse,socialMF,sigmoid,dsigmoid,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+                jobs.append(job_server.submit(test,(R,T,N,M,K_,max_r,lambdaU,lambdaV,lambdaT,R),(meanap,rmse,socialMF,sigmoid,dsigmoid,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
     job_server.wait()
-    rmse_,mae_ = 100000,1000000
     for job in jobs:
             U,V,rmse1,mae1 = job()
             if mae1+rmse1<mae_+rmse_:
@@ -214,7 +236,7 @@ def t_yelp():
     print "jobs finish"
     jobs = []
     for K in [1,2,3,4,5]:
-        jobs.append(job_server.submit(test,(R,T,N,M,K,max_r,lambdaU_,lambdaV_,lambdaT,R),(meanap,rmse,socialMF,sigmoid,dsigmoid,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+        jobs.append(job_server.submit(test,(R,T,N,M,K,max_r,lambdaU_,lambdaV_,lambdaT_,R),(meanap,rmse,socialMF,sigmoid,dsigmoid,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
     job_server.wait()
     for job in jobs:
             U,V,rmse1,mae1 = job()
@@ -225,11 +247,11 @@ def t_yelp():
                 lambdaU_ = lambdaU
                 lambdaV_ = lambdaV
                 mae_,rmse_ = mae1,rmse1
-    print "jobs finish"
-    print "rmse",rmse(U_,V_,R_test)
-    print "map",meanap(U_,V_,R_test)
+    print "=========all finish=============="
+    print "rmse-test",rmse(U_,V_,R_test)
+    print "map-test",meanap(U_,V_,R_test)
 
 
 if __name__ == "__main__":
-  t_yelp()
+  t_yelp(100,2000)
    # t_toy()

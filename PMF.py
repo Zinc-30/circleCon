@@ -104,6 +104,9 @@ def test(R,N,M,K,lambdaU,lambdaV,R_test):
         %(N,M,K,lambdaU,lambdaV)
     start = time()
     U,V = PMF(R,N,M,K,lambdaU,lambdaV)
+    print "=================RESULT======================="
+    print 'K:%d,lambdaU:%s, lambdaV:%s' \
+            %(K,lambdaU,lambdaV)
     print "rmse",rmse(U,V,R_test)
     print "map",meanap(U,V,R_test)
     print "time",time()-start
@@ -111,7 +114,7 @@ def test(R,N,M,K,lambdaU,lambdaV,R_test):
 
 
 
-def t_yelp():
+def t_yelp(limitu,limiti):
     #data from: http://www.trustlet.org/wiki/Epinions_datasets
     N,M = 0,0
     max_r = 5.0
@@ -119,8 +122,6 @@ def t_yelp():
     R=defaultdict(dict)
     T=defaultdict(dict)
     R_test=defaultdict(dict)
-    limitu = 100
-    limiti = 1000
     print 'get T'
     for line in open('./yelp_data/users.txt','r'):
         u = int(line.split(':')[0])
@@ -134,28 +135,26 @@ def t_yelp():
     print 'get R'
     for line in open('./yelp_data/ratings-train.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
-        N=max(N,u)
-        M=max(M,i)
         if u<limitu and i<limiti:
             R[u][i] = r/max_r
-
-    N+=1
-    M+=1
+    #         N=max(N,u)
+    #         M=max(M,i)
+    # N+=1
+    # M+=1
     print 'get R_test'
     for line in open('./yelp_data/ratings-test.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
         if u<limitu and i<limiti:
             R_test[u][i] = r/max_r
 
-    lambdaU,lambdaV,K=0.2, 0.2, 2
-    job_server = pp.Server()
+    lambdaU_,lambdaV_,K_=0.2, 0.2, 2
+    U_,V_,rmse_,mae_ = test(R,N,M,K_,lambdaU_,lambdaV_,R_test)
+    job_server = pp.Server(5)
     jobs = []
     for lambdaU in [0.1,0.5,1]:
         for lambdaV in [0.1,0.5,1]:
-            # test(R,N,M,K,lambdaU,lambdaV,R_test)
-            jobs.append(job_server.submit(test,(R,N,M,K,lambdaU,lambdaV,R),(meanap,rmse,PMF,sigmoid,dsigmoid,reverseR),("numpy as np","from collections import defaultdict","random","from time import time")))
+            jobs.append(job_server.submit(test,(R,N,M,K_,lambdaU,lambdaV,R),(meanap,rmse,PMF,sigmoid,dsigmoid,reverseR),("numpy as np","from collections import defaultdict","random","from time import time")))
     job_server.wait()
-    rmse_,mae_ = 100000,1000000
     for job in jobs:
             U,V,rmse1,mae1 = job()
             if mae1+rmse1<mae_+rmse_:
@@ -176,9 +175,9 @@ def t_yelp():
                 V_ = V
                 lambdaU_ = lambdaU
                 lambdaV_ = lambdaV
-    print "jobs finish"
+    print "=========all finish=============="
     print "rmse-test",rmse(U_,V_,R_test)
     print "map-test",meanap(U_,V_,R_test)
     
 if __name__ == "__main__":
-   t_yelp()
+   t_yelp(100,2000)

@@ -3,6 +3,10 @@ import numpy as np
 from collections import defaultdict
 from time import time
 import pp
+def sigmoid(z):
+    return 1.0 / (1 + np.exp(-z))
+def dsigmoid(z):
+    return np.exp(-z)/(1+np.exp(-z))**2
 def reverseR(R):
     Rr=defaultdict(dict)
     for u in R:
@@ -27,28 +31,24 @@ def average(Rr,c):
     else:
         return 0
     
-def rmse(U,V,R,bias,v2c):
+def rmse(U,V,R,v2c):
     error = 0.0
     nums = 0
     for u in R:
         for i in R[u]:
             cid = v2c[i]
             if cid<len(U):
-                ub = U[cid][u]
-                vb = V[i]
-                error += (max(0,(ub.dot(vb)+bias[cid])) - R[u][i])**2
+                error += 25*(sigmoid(U[cid][u].dot(V[i]))- R[u][i])**2
                 nums += 1
     return np.sqrt(error/nums)
-def mae(U,V,R,bias,v2c):
+def mae(U,V,R,v2c):
     ap = 0.0
     nums = 0
     for u in R:
         for i in R[u]:
             cid = v2c[i]
             if cid<len(U):
-                ub = U[cid][u]
-                vb = V[i]
-                ap += abs(max(0,(ub.dot(vb)+bias[cid]))-R[u][i])/R[u][i]
+                ap += abs(sigmoid(U[cid][u].dot(V[i]))-R[u][i])/R[u][i]
                 nums += 1
     return ap/nums
 def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
@@ -69,14 +69,12 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
                         if nc[ci]>0:
                             res[ci][u][v] = 1.0 * nc[ci]/All
         return res
-
     def costL(U,V,*args):
         vid,R,T,Rr=args
         cost=0.0
-        bias = average(Rr,vid)
         for u in R:
             for i in (set(vid)&set(R[u])):
-                cost += 0.5 * (R[u][i] - bias - U[u].dot(V[i]))**2
+                cost += 0.5 * (R[u][i] - sigmoid(U[u].dot(V[i])))**2
         cost += lambdaU/2 * np.linalg.norm(U)
         cost += lambdaV/2 * np.linalg.norm(V)
         for u in T:
@@ -90,10 +88,10 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
         vid,R,T,Rr=args
         dU = np.zeros(U.shape)
         dV = np.zeros(V.shape)
-        bias = average(Rr,vid)
         for u in R:
             for i in set(vid)&set(R[u]):
-                dU[u] += V[i]*(bias+U[u].dot(V[i])-R[u][i]) 
+                tmp = U[u].dot(V[i])
+                dU[u] += V[i]*dsigmoid(tmp)*(sigmoid(tmp)-R[u][i]) 
             dU[u] += lambdaU * U[u]
             e = np.copy(U[u]) #1xK
             for v in T[u]:
@@ -107,10 +105,10 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
                         e-= T[v][w] * U[w]
                     e2 += T[v][u] * e 
             dU[u] -= lambdaT * e2
-
         for i in vid:
             for u in Rr[i]:
-                dV[i] += U[u] * (bias+U[u].dot(V[i])-R[u][i])
+                tmp = U[u].dot(V[i])
+                dV[i] += U[u] * dsigmoid(tmp) * (sigmoid(tmp)-R[u][i])
             dV[i] += lambdaV * V[i]
         return dU,dV
 
@@ -177,6 +175,7 @@ def circleRec(R,T,clists, N,M,K, lambdaU,lambdaV,lambdaT):
         Uc = np.random.normal(0,0.01,size=(N,K))
         x0=Uc,Vembd
         # Uc,Vembd = optim(x0,c,cid)
+        #Uc,Vembd = optim(x0,c,cid)
         Uc,Vembd = train(Uc,Vembd,c,cid)
         Uembd[cid] = Uc
     return Uembd,Vembd
@@ -203,30 +202,28 @@ def test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
     # print "u",Uembd
     # print "v",Vembd  
     Rr = reverseR(R)
-    bias = []
-    for c in C:
-        bias.append(average(Rr,c))
-
     v2c = defaultdict(int)
     for cid,c in enumerate(C):
         for v in c:
             v2c[v] = cid
 
     # print 'R_hat:\n', R_hat
+    print "=================RESULT======================="
+    print 'K:%d,lambdaU:%s, lambdaV:%s,lambdaT:%s' \
+            %(K,lambdaU,lambdaV,lambdaT)
     print "time",time()-start
-    print "rmse",rmse(Uembd,Vembd,R_test,bias,v2c)
-    print "mae",mae(Uembd,Vembd,R_test,bias,v2c)
-    return Uembd,Vembd,rmse(Uembd,Vembd,R_test,bias,v2c),mae(Uembd,Vembd,R_test,bias,v2c)
+    print "rmse",rmse(Uembd,Vembd,R_test,v2c)
+    print "mae",mae(Uembd,Vembd,R_test,v2c)
+    return Uembd,Vembd,rmse(Uembd,Vembd,R_test,v2c),mae(Uembd,Vembd,R_test,v2c)
 
-def t_yelp():
+def t_yelp(limitu,limiti):
     #data from: http://www.trustlet.org/wiki/Epinions_datasets
-    N,M = 0,0
+    N,M = limitu,limiti
     max_r = 5.0
     cNum = 8
     R=defaultdict(dict)
     T=defaultdict(dict)
     R_test=defaultdict(dict)
-    limitu,limiti = 1000,20000
     print 'get T'
     for line in open('./yelp_data/users.txt','r'):
         u = int(line.split(':')[0])
@@ -240,13 +237,9 @@ def t_yelp():
     k = 0
     for line in open('./yelp_data/ratings-train.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
-        N = max(N,u)
-        M = max(M,i)
         if u<limitu and i<limiti:
             R[u][i] = r/max_r
 
-    N+=1
-    M+=1
     print 'get R_test'
     for line in open('./yelp_data/ratings-test.txt','r'):
         u,i,r = [int(x) for x in line.split('::')[:3]]
@@ -258,19 +251,16 @@ def t_yelp():
         i,ci = [int(x) for x in line.split(' ')]
         if i<limiti:
             C[ci].append(i)
-
-    lambdaU,lambdaV,lambdaT,K=0.2, 0.2, 0.1, 4
-    test(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
-
-    job_server = pp.Server()
+    lambdaU_,lambdaV_,lambdaT_,K_=0.2, 0.2, 0.1, 4
+    U_,V_,rmse_,mae_ = test(R,T,C,N,M,K_,max_r,lambdaU_,lambdaV_,lambdaT_,R_test)
+    job_server = pp.Server(5)
     jobs = []
     for lambdaU in [0.2,0.5,1]:
         for lambdaV in [0.2,0.5,1]:
             for lambdaT in [0.1,0.5,1]:
                 # test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
-                jobs.append(job_server.submit(test,(R,T,C,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R),(mae,rmse,average,circleRec,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+                jobs.append(job_server.submit(test,(R,T,C,N,M,K_,max_r,lambdaU,lambdaV,lambdaT,R),(mae,rmse,average,circleRec,reverseR,normalize,sigmoid,dsigmoid),("numpy as np","from collections import defaultdict","random","from time import time")))
     job_server.wait()
-    rmse_,mae_ = 100000,1000000
     for job in jobs:
             U,V,rmse1,mae1 = job()
             if mae1+rmse1<mae_+rmse_:
@@ -283,7 +273,7 @@ def t_yelp():
     print "jobs finish"
     jobs = []
     for K in [1,2,3,4,5]:
-        jobs.append(job_server.submit(test,(R,T,C,N,M,K,max_r,lambdaU_,lambdaV_,lambdaT,R_test),(mae,rmse,average,circleRec,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+        jobs.append(job_server.submit(test,(R,T,C,N,M,K,max_r,lambdaU_,lambdaV_,lambdaT_,R_test),(mae,rmse,average,circleRec,reverseR,normalize,sigmoid,dsigmoid),("numpy as np","from collections import defaultdict","random","from time import time")))
     job_server.wait()
     for job in jobs:
             U,V,rmse1,mae1 = job()
@@ -294,11 +284,11 @@ def t_yelp():
                 lambdaU_ = lambdaU
                 lambdaV_ = lambdaV
                 mae_,rmse_ = mae1,rmse1
-    print "jobs finish"
-    print "rmse",rmse_
-    print "map",mae_
+    print "=========all finish=============="
+    print "rmse-test",rmse_
+    print "map-test",mae_
 
 if __name__ == "__main__":
 #   t_epinion()
-   t_yelp()
+   t_yelp(100,2000)
    # t_toy()
