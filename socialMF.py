@@ -1,7 +1,8 @@
 import random
 import numpy as np
 from collections import defaultdict
-
+from time import time
+import pp
 
 def sigmoid(z):
     return 1.0 / (1 + np.exp(-z))
@@ -36,7 +37,7 @@ def meanap(U,V,R):
         for i in R[u]:
             ub = U[u]
             vb = V[i]
-            ap += 1 - abs(sigmoid(U[u].dot(V[i]))-R[u][i])/R[u][i]
+            ap += abs(sigmoid(U[u].dot(V[i]))-R[u][i])/R[u][i]
             nums += 1
     return ap/nums
 
@@ -123,8 +124,11 @@ def test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test):
     #     for i in R[u]:
     #         R_hat[u][i] = sigmoid(U[u].dot(V[i])) *max_r
     # print 'R_hat:\n', R_hat
+    start = time()
     print "rmse",rmse(U,V,R_test)
     print "map",meanap(U,V,R_test)
+    print "time",time()-start
+    return U,V,rmse(U,V,R_test),meanap(U,V,R_test)
 
 
 def t_toy():
@@ -150,7 +154,6 @@ def t_toy():
     for i in xrange(len(T0)):
         for j in T0[i]:
             T[i][j-1]=1.0
-
     test(R,N,M,T,K,max_r,lambdaU,lambdaV,lambdaT)
 
 def t_yelp():
@@ -161,8 +164,8 @@ def t_yelp():
     R=defaultdict(dict)
     T=defaultdict(dict)
     R_test=defaultdict(dict)
-    limitu = 10000
-    limiti = 100000
+    limitu = 1000
+    limiti = 20000
     print 'get T'
     for line in open('./yelp_data/users.txt','r'):
         u = int(line.split(':')[0])
@@ -190,7 +193,41 @@ def t_yelp():
             R_test[u][i] = r/max_r
 
     lambdaU,lambdaV,lambdaT,K=0.2, 0.2, 0.1, 4
-    test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
+    job_server = pp.Server()
+    jobs = []
+    for lambdaU in [0.2,0.5,1]:
+        for lambdaV in [0.2,0.5,1]:
+            for lambdaT in [0.1,0.5,1]:
+                # test(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R_test)
+                jobs.append(job_server.submit(test,(R,T,N,M,K,max_r,lambdaU,lambdaV,lambdaT,R),(meanap,rmse,socialMF,sigmoid,dsigmoid,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+    job_server.wait()
+    rmse_,mae_ = 100000,1000000
+    for job in jobs:
+            U,V,rmse1,mae1 = job()
+            if mae1+rmse1<mae_+rmse_:
+                U_ = U
+                V_ = V
+                lambdaU_ = lambdaU
+                lambdaV_ = lambdaV
+                lambdaT_ = lambdaT
+                mae_,rmse_ = mae1,rmse1
+    print "jobs finish"
+    jobs = []
+    for K in [1,2,3,4,5]:
+        jobs.append(job_server.submit(test,(R,T,N,M,K,max_r,lambdaU_,lambdaV_,lambdaT,R),(meanap,rmse,socialMF,sigmoid,dsigmoid,reverseR,normalize),("numpy as np","from collections import defaultdict","random","from time import time")))
+    job_server.wait()
+    for job in jobs:
+            U,V,rmse1,mae1 = job()
+            if mae1+rmse1<mae_+rmse_:
+                K_ = K
+                U_ = U
+                V_ = V
+                lambdaU_ = lambdaU
+                lambdaV_ = lambdaV
+                mae_,rmse_ = mae1,rmse1
+    print "jobs finish"
+    print "rmse-test",rmse(U_,V_,R_test)
+    print "map-test",meanap(U_,V_,R_test)
 
 
 if __name__ == "__main__":
